@@ -1,0 +1,6 @@
+streamlit>=1.2.0
+google-cloud-texttospeech>=2.5.0
+google-auth>=2.0.0
+pandas
+numpy
+python-dotenv
