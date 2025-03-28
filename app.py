@@ -1,5 +1,6 @@
 
 
+
 # import streamlit as st
 # from google.cloud import texttospeech
 # import time
@@ -176,7 +177,7 @@ tab1, tab2 = st.tabs(["Google TTS", "ElevenLabs TTS"])
 with tab1:
     st.header("Google Text-to-Speech")
     text = st.text_area("Enter Text for Google TTS", "Hello, how are you today?")
-    credentials_path = "/home/ec2-user/TTS/google_tts/creds.json"
+    credentials_path = "/workspaces/streamlit_tts_app/creds.json"
     output_filename = "google_output_audio.mp3"
     language_options = {"Hindi (India)": "hi-IN", "English (US)": "en-US", "Spanish (Spain)": "es-ES", "French (France)": "fr-FR"}
     language_code = st.selectbox("Select Language (Google)", list(language_options.keys()))
