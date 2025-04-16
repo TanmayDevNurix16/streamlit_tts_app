@@ -4,3 +4,5 @@ google-auth>=2.0.0
 pandas
 numpy
 python-dotenv
+boto3==1.37.34
+pygame==2.6.1

@@ -5,7 +5,12 @@ import time
 import os
 import requests
 from dotenv import load_dotenv
-
+import boto3
+import pygame
+from tempfile import NamedTemporaryFile
+from contextlib import closing
+import os
+import time
 load_dotenv()
 
 # Google TTS Function
@@ -66,11 +71,49 @@ def elevenlabs_synthesize_speech(text, output_filename, api_key, voice_id, model
     else:
         st.error(f"Error with ElevenLabs API: {response.status_code}, {response.text}")
         return None
-
+def aws_synthesize_speech(text, output_filename, voice_id="Joanna", engine="neural", output_format="mp3"):
+    """Synthesizes speech from the input string of text using AWS Polly."""
+    start_time = time.time()
+    try:
+        # Get AWS credentials from Streamlit secrets
+        aws_access_key_id = st.secrets["aws_access_key_id"]
+        aws_secret_access_key = st.secrets["aws_secret_access_key"]
+        region_name = st.secrets.get("aws_region", "us-east-1")
+        
+        # Initialize a session using Amazon Polly
+        polly_client = boto3.Session(
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+            region_name=region_name
+        ).client('polly')
+        
+        # Request speech synthesis
+        response = polly_client.synthesize_speech(
+            Text=text,
+            OutputFormat=output_format,
+            VoiceId=voice_id,
+            Engine=engine
+        )
+        
+        # Save the audio content to a file
+        if "AudioStream" in response:
+            with open(output_filename, "wb") as out:
+                out.write(response["AudioStream"].read())
+            end_time = time.time()
+            time_taken = end_time - start_time
+            print(f'Audio content written to file "{output_filename}"')
+            print(f'Time taken to generate audio: {time_taken:.2f} seconds')
+            return time_taken
+        else:
+            st.error("Could not get AudioStream from response")
+            return None
+    except Exception as e:
+        st.error(f"Error in AWS Polly TTS: {str(e)}")
+        return None
 # Streamlit UI Setup
 st.title("Text-to-Speech Synthesis Apps")
 
-tab1, tab2 = st.tabs(["Google TTS", "ElevenLabs TTS"])
+tab1, tab2,tab3 = st.tabs(["Google TTS", "ElevenLabs TTS","AWS Polly TTS"])
 
 # Google TTS Tab
 with tab1:
@@ -381,3 +424,201 @@ with tab2:
                     st.audio(output_filename_eleven, format='audio/mp3')
         else:
             st.error("Please provide text and ensure API key is configured in secrets.")
+with tab3:
+    st.header("AWS Polly Text-to-Speech")
+    text_aws = st.text_area("Enter Text for AWS Polly TTS", "Hello, how are you today?")
+    
+    # Check if AWS credentials are configured
+    aws_credentials_configured = False
+    try:
+        aws_access_key_id = st.secrets["aws_access_key_id"]
+        aws_secret_access_key = st.secrets["aws_secret_access_key"]
+        aws_credentials_configured = True
+    except Exception as e:
+        st.warning("AWS credentials not found in secrets. Please add them to your Streamlit secrets.")
+    
+    # AWS Polly Voice Selection
+    aws_voice_options = {
+        # English (US) Voices
+        "Joanna (US English, Female)": "Joanna",
+        "Matthew (US English, Male)": "Matthew",
+        "Salli (US English, Female)": "Salli",
+        "Joey (US English, Male)": "Joey",
+        "Kimberly (US English, Female)": "Kimberly",
+        "Kevin (US English, Male)": "Kevin",
+        "Ruth (US English, Female)": "Ruth",
+        "Stephen (US English, Male)": "Stephen",
+        "Ivy (US English, Female Child)": "Ivy",
+        "Justin (US English, Male Child)": "Justin",
+        # British English Voices
+        "Amy (British English, Female)": "Amy",
+        "Emma (British English, Female)": "Emma",
+        "Brian (British English, Male)": "Brian",
+        # Indian English Voices
+        "Aditi (Indian English)": "Aditi",
+        "Raveena (Indian English)": "Raveena",
+        # Spanish Voices
+        "Conchita (Spanish)": "Conchita",
+        "Lucia (Spanish)": "Lucia",
+        # French Voices
+        "Celine (French)": "Celine",
+        "Lea (French)": "Lea",
+        # German Voices
+        "Marlene (German)": "Marlene",
+        "Vicki (German)": "Vicki",
+        # Hindi Voice
+        "Aditi (Hindi)": "Aditi",
+        # Japanese Voices
+        "Takumi (Japanese)": "Takumi",
+        "Mizuki (Japanese)": "Mizuki"
+    }
+    
+    voice_name_aws = st.selectbox("Select Voice (AWS Polly)", list(aws_voice_options.keys()))
+    selected_voice_id_aws = aws_voice_options[voice_name_aws]
+    
+    # Engine selection (Neural vs Standard)
+    engine_options = {
+        "Neural (Higher quality, not available for all voices)": "neural",
+        "Standard (Available for all voices)": "standard"
+    }
+    
+    engine_aws = st.selectbox("Engine Type", list(engine_options.keys()))
+    selected_engine_aws = engine_options[engine_aws]
+    
+    # Some language and region info depending on selected voice
+    voice_language_info = {
+        "Joanna": "US English - Neural and Standard engines supported",
+        "Matthew": "US English - Neural and Standard engines supported",
+        "Aditi": "Indian English/Hindi - Only Standard engine supported",
+        "Brian": "British English - Neural and Standard engines supported"
+        # Add more as needed
+    }
+    
+    if selected_voice_id_aws in voice_language_info:
+        st.info(f"**Voice Info:** {voice_language_info[selected_voice_id_aws]}")
+    
+    # Output format selection
+    format_options = {
+        "MP3 (Recommended)": "mp3",
+        "OGG Vorbis": "ogg_vorbis",
+        "PCM": "pcm"
+    }
+    
+    output_format_aws = st.selectbox("Output Format", list(format_options.keys()))
+    selected_format_aws = format_options[output_format_aws]
+    
+    output_filename_aws = f"aws_output_audio.{selected_format_aws}"
+    
+    # Allow for chunking long text
+    st.subheader("Long Text Options")
+    enable_chunking = st.checkbox("Enable automatic chunking for long text", value=True)
+    
+    if enable_chunking:
+        max_chars = st.slider(
+            "Maximum characters per chunk", 
+            min_value=500, 
+            max_value=3000, 
+            value=1500, 
+            step=100,
+            help="Amazon Polly has character limits. For long text, it will be broken into chunks of this size."
+        )
+    
+    # Text type options (Normal text vs SSML)
+    text_type_options = {
+        "Plain Text": "text",
+        "SSML (Speech Synthesis Markup Language)": "ssml"
+    }
+    
+    text_type_aws = st.selectbox("Text Type", list(text_type_options.keys()))
+    selected_text_type_aws = text_type_options[text_type_aws]
+    
+    if selected_text_type_aws == "ssml":
+        st.info("""
+        **SSML Example:**
+        ```xml
+        <speak>
+            Hello <break time="1s"/> This is a demo of <emphasis level="strong">SSML</emphasis> in AWS Polly.
+        </speak>
+        ```
+        """)
+    
+    if st.button('Synthesize Speech (AWS Polly)'):
+        if text_aws and aws_credentials_configured:
+            with st.spinner("Generating speech with AWS Polly..."):
+                # Check if text needs to be chunked
+                if enable_chunking and len(text_aws) > max_chars:
+                    st.info(f"Text is {len(text_aws)} characters long and will be processed in chunks")
+                    
+                    # Break text into chunks
+                    chunks = []
+                    current_chunk = ""
+                    sentences = text_aws.replace('\n', ' ').split('. ')
+                    
+                    for sentence in sentences:
+                        if not sentence:
+                            continue
+                            
+                        # Add period back if it was removed during split
+                        if sentence == sentences[-1] and not text_aws.endswith('. '):
+                            formatted_sentence = sentence
+                        else:
+                            formatted_sentence = sentence + '. '
+                            
+                        # If adding this sentence exceeds the limit, start a new chunk
+                        if len(current_chunk) + len(formatted_sentence) > max_chars and current_chunk:
+                            chunks.append(current_chunk)
+                            current_chunk = formatted_sentence
+                        else:
+                            current_chunk += formatted_sentence
+                    
+                    # Add the last chunk if it's not empty
+                    if current_chunk:
+                        chunks.append(current_chunk)
+                    
+                    # Process each chunk
+                    all_audio_files = []
+                    total_time = 0
+                    
+                    for i, chunk in enumerate(chunks):
+                        chunk_filename = f"aws_chunk_{i+1}.{selected_format_aws}"
+                        st.write(f"Processing chunk {i+1} of {len(chunks)}...")
+                        
+                        time_taken = aws_synthesize_speech(
+                            chunk,
+                            chunk_filename,
+                            voice_id=selected_voice_id_aws,
+                            engine=selected_engine_aws,
+                            output_format=selected_format_aws
+                            # text_type=selected_text_type_aws
+                        )
+                        
+                        if time_taken is not None:
+                            total_time += time_taken
+                            all_audio_files.append(chunk_filename)
+                    
+                    st.success(f"All chunks processed successfully! Total time: {total_time:.2f} seconds")
+                    
+                    # Display each audio chunk
+                    for i, audio_file in enumerate(all_audio_files):
+                        st.write(f"Chunk {i+1}:")
+                        st.audio(audio_file, format=f'audio/{selected_format_aws}')
+                    
+                else:
+                    # Process the text as a single chunk
+                    time_taken = aws_synthesize_speech(
+                        text_aws,
+                        output_filename_aws,
+                        voice_id=selected_voice_id_aws,
+                        engine=selected_engine_aws,
+                        output_format=selected_format_aws
+                        # text_type=selected_text_type_aws
+                    )
+                    
+                    if time_taken is not None:
+                        st.success(f"Audio synthesized successfully! Time taken: {time_taken:.2f} seconds")
+                        st.audio(output_filename_aws, format=f'audio/{selected_format_aws}')
+        else:
+            if not text_aws:
+                st.error("Please enter text to synthesize.")
+            if not aws_credentials_configured:
+                st.error("AWS credentials are not properly configured.")
