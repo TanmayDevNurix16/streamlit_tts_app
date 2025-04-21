@@ -71,7 +71,7 @@ def elevenlabs_synthesize_speech(text, output_filename, api_key, voice_id, model
     else:
         st.error(f"Error with ElevenLabs API: {response.status_code}, {response.text}")
         return None
-def aws_synthesize_speech(text, output_filename, voice_id="Joanna", engine="neural", output_format="mp3"):
+def aws_synthesize_speech(text, output_filename,texttype, voice_id="Joanna", engine="neural", output_format="mp3"):
     """Synthesizes speech from the input string of text using AWS Polly."""
     start_time = time.time()
     try:
@@ -92,7 +92,8 @@ def aws_synthesize_speech(text, output_filename, voice_id="Joanna", engine="neur
             Text=text,
             OutputFormat=output_format,
             VoiceId=voice_id,
-            Engine=engine
+            Engine=engine,
+            TextType = texttype
         )
         
         # Save the audio content to a file
@@ -110,6 +111,8 @@ def aws_synthesize_speech(text, output_filename, voice_id="Joanna", engine="neur
     except Exception as e:
         st.error(f"Error in AWS Polly TTS: {str(e)}")
         return None
+    
+
 # Streamlit UI Setup
 st.title("Text-to-Speech Synthesis Apps")
 
@@ -582,19 +585,36 @@ with tab3:
                     for i, chunk in enumerate(chunks):
                         chunk_filename = f"aws_chunk_{i+1}.{selected_format_aws}"
                         st.write(f"Processing chunk {i+1} of {len(chunks)}...")
-                        
-                        time_taken = aws_synthesize_speech(
+                        if text_type_options.keys()=="Plain Text":
+                            time_taken = aws_synthesize_speech(
+                                chunk,
+                                chunk_filename,
+                                selected_text_type_aws,
+                                voice_id=selected_voice_id_aws,
+                                engine=selected_engine_aws,
+                                output_format=selected_format_aws,
+                                texttype = selected_text_type_aws
+                                # text_type=selected_text_type_aws
+                            )
+                            
+                            if time_taken is not None:
+                                total_time += time_taken
+                                all_audio_files.append(chunk_filename)
+                        else:
+                            time_taken = aws_synthesize_speech(
                             chunk,
                             chunk_filename,
+                            selected_text_type_aws,
                             voice_id=selected_voice_id_aws,
                             engine=selected_engine_aws,
-                            output_format=selected_format_aws
+                            output_format=selected_format_aws,
+                            texttype = selected_text_type_aws
                             # text_type=selected_text_type_aws
-                        )
-                        
-                        if time_taken is not None:
-                            total_time += time_taken
-                            all_audio_files.append(chunk_filename)
+                            )
+                            
+                            if time_taken is not None:
+                                total_time += time_taken
+                                all_audio_files.append(chunk_filename)
                     
                     st.success(f"All chunks processed successfully! Total time: {total_time:.2f} seconds")
                     
@@ -608,9 +628,11 @@ with tab3:
                     time_taken = aws_synthesize_speech(
                         text_aws,
                         output_filename_aws,
+                        selected_text_type_aws,
                         voice_id=selected_voice_id_aws,
                         engine=selected_engine_aws,
-                        output_format=selected_format_aws
+                        output_format=selected_format_aws,
+                        
                         # text_type=selected_text_type_aws
                     )
                     
